@@ -383,26 +383,6 @@ class HackBoxSettings:
             entities[entity["key"]] = entity
         
         return entities
-        key = self.sanitizeKey(key)
-        group = self.sanitizeGroup(group)
-        try:
-            entity = self._tc.get_entity(row_key=group + "|" + key, partition_key=self._tenantName)
-            del entity["PartitionKey"]
-            del entity["RowKey"]
-            return entity
-        except ResourceNotFoundError:
-            return None
-    def getGroup(self, group: str = "Default") -> Dict[str, Union[str, int, bool]]:
-        group = self.sanitizeGroup(group)
-        entities = {}
-        for entity in self._tc.query_entities(query_filter=f"PartitionKey eq '{self._tenantName}' and group eq '{group}'"):
-            del entity["PartitionKey"]
-            del entity["RowKey"]
-            entities[entity["key"]] = entity
-        
-        return entities
-
-
 
 
 #region -------- WEB/UI ENDPOINTS --------

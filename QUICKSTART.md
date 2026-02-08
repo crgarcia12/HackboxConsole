@@ -10,7 +10,7 @@ This guide will help you run HackBox Console quickly with Docker Compose.
 
 1. **Start the application:**
    ```bash
-   docker-compose up -d
+   docker compose up -d
    ```
 
 2. **Access the application:**
@@ -27,7 +27,7 @@ This guide will help you run HackBox Console quickly with Docker Compose.
 ## Stopping the Application
 
 ```bash
-docker-compose down
+docker compose down
 ```
 
 ## Customizing Users
@@ -58,7 +58,7 @@ Example:
 
 After modifying `users.json`, restart the application:
 ```bash
-docker-compose restart
+docker compose restart
 ```
 
 ## Adding Challenges and Solutions
@@ -71,7 +71,7 @@ docker-compose restart
 
 3. Restart the application to pick up new files:
    ```bash
-   docker-compose restart
+   docker compose restart
    ```
 
 ## Features
@@ -95,26 +95,26 @@ docker-compose restart
 
 ### Application won't start
 - Check if port 8000 is already in use
-- Check Docker logs: `docker-compose logs -f`
+- Check Docker logs: `docker compose logs -f`
 
 ### Can't login
 - Verify `users.json` file exists and is valid JSON
 - Check the logs for error messages
 
 ### Changes not appearing
-- Restart the container: `docker-compose restart`
+- Restart the container: `docker compose restart`
 
 ## Development Mode
 
 For development with live code reloading:
 
 ```bash
-docker-compose -f docker-compose.dev.yml up
+docker compose -f docker compose.dev.yml up
 ```
 
 ## Azure Integration (Optional)
 
-If you want to use Azure Table Storage instead of local file storage, set these environment variables in `docker-compose.yml`:
+If you want to use Azure Table Storage instead of local file storage, set these environment variables in `docker compose.yml`:
 
 ```yaml
 environment:
@@ -132,7 +132,7 @@ Application data is stored in a Docker volume named `hackbox-data`. This persist
 
 To reset all data:
 ```bash
-docker-compose down -v
+docker compose down -v
 ```
 
 ## Support

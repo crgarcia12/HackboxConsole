@@ -259,9 +259,6 @@ class LocalSettings:
     
     def setPropagatedStep(self, step: Union[int, str], challenges_mds: list):
         """Set step with propagation logic (stopwatch, timing, etc.)."""
-        from hack_console.views import challenges_mds as default_challenges
-        if challenges_mds is None:
-            challenges_mds = default_challenges
             
         reset_triggered = False
         previous_step = self.getStep()
