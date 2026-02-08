@@ -6,7 +6,27 @@
 > - Microsoft [MicroHack - Integration Guide](documentation/MicroHack/README.md)
 > - Or your own markdown based challenges and solutions: [Generic Deployment Instructions](documentation/Generic/README.md)
 
+## 🚀 Quick Start (Standalone - No Azure Required!)
 
+**The easiest way to run HackBox Console is with Docker Compose:**
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/crgarcia12/HackboxConsole.git
+cd HackboxConsole
+
+# 2. Start the application
+docker compose up -d
+
+# 3. Open your browser to http://localhost:8000
+# Login with: admin/admin (coach) or user/user (hacker)
+```
+
+✅ **No Azure subscription required!** The application now works standalone with local file storage.
+
+📖 For detailed instructions, see [QUICKSTART.md](QUICKSTART.md)
+
+---
 
 ![HackBox Console Main](./hackbox.jpg)
 
@@ -35,7 +55,9 @@ Thanks to [zero-md](https://github.com/zerodevx/zero-md) the markdown files are 
 - [x] Renders single secrets ``<secret group="groupname" name="secretname" show="true|false|alwayshidden" />``
 - [x] Renders secrets group table ``<secretgroup group="azure" show="true|false|alwayshidden" />``
 
-## Prerequisites
+## Advanced Deployment Options
+
+### Prerequisites for Azure Deployment
  - Powershell 7+
  - Azure Az Module
  - Git

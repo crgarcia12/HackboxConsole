@@ -4,14 +4,25 @@ import traceback
 from flask import Flask, render_template, request, jsonify, redirect, url_for, send_from_directory
 from . import app, all_users, all_tenants, HackBoxUser
 from flask_login import login_user, login_required, logout_user, current_user
-from azure.data.tables import TableServiceClient
-from azure.core.exceptions import ResourceExistsError, ResourceNotFoundError
-from azure.identity import DefaultAzureCredential
 from typing import Union, Dict, Tuple
 import natsort
 
+# Try to import Azure dependencies, but fall back to local storage if not available
+try:
+    from azure.data.tables import TableServiceClient
+    from azure.core.exceptions import ResourceExistsError, ResourceNotFoundError
+    from azure.identity import DefaultAzureCredential
+    AZURE_AVAILABLE = True
+except ImportError:
+    AZURE_AVAILABLE = False
+
+# Import local storage fallback
+from .local_storage import LocalCredentials, LocalSettings
+
 def get_azure_credential():
     """Get a fresh Azure credential instance to avoid token caching issues."""
+    if not AZURE_AVAILABLE:
+        return None
     return DefaultAzureCredential(
         exclude_shared_token_cache_credential=True,  # Avoid stale cached tokens
     )
@@ -22,6 +33,15 @@ def get_table_endpoint() -> str:
     if endpoint and not endpoint.startswith("https://") and not endpoint.startswith("http://"):
         endpoint = f"https://{endpoint}"
     return endpoint
+
+def use_local_storage() -> bool:
+    """Determine whether to use local storage instead of Azure."""
+    # Use local storage if Azure is not available OR if connection string/endpoint not set
+    if not AZURE_AVAILABLE:
+        return True
+    endpoint = get_table_endpoint()
+    conn_str = os.getenv("HACKBOX_CONNECTION_STRING", "")
+    return not endpoint and not conn_str
 
 
 # get the directory of this file
@@ -50,18 +70,31 @@ solutions_mds = recursive_list_md_files(solutions_dir, "solution")
 class HackBoxCredentials:
     _tsc = None
     _tc  = None
+    _local = None
     _tenantName = "Default"
 
     def __init__(self, tenantName : str = "Default"):
-        endpoint = get_table_endpoint()
-        if endpoint:
-            self._tsc = TableServiceClient(endpoint=endpoint, credential=get_azure_credential())
-        else:
-            self._tsc = TableServiceClient.from_connection_string(conn_str=os.getenv("HACKBOX_CONNECTION_STRING"))
-        self._tc = self._tsc.get_table_client("credentials")
         self._tenantName = str(tenantName).strip()
         if self._tenantName == "":
             self._tenantName = "Default"
+        
+        # Use local storage if Azure is not configured
+        if use_local_storage():
+            self._local = LocalCredentials(tenantName)
+            return
+        
+        # Try Azure Table Storage
+        try:
+            endpoint = get_table_endpoint()
+            if endpoint:
+                self._tsc = TableServiceClient(endpoint=endpoint, credential=get_azure_credential())
+            else:
+                self._tsc = TableServiceClient.from_connection_string(conn_str=os.getenv("HACKBOX_CONNECTION_STRING"))
+            self._tc = self._tsc.get_table_client("credentials")
+        except Exception as e:
+            print(f"Failed to connect to Azure Table Storage: {e}")
+            print("Falling back to local storage")
+            self._local = LocalCredentials(tenantName)
 
     def sanitizeName(self, key: str) -> str:
         return "".join([c for c in key if c.isalnum() or c == "_" or c == "-" or c == " "]).strip()
@@ -70,11 +103,18 @@ class HackBoxCredentials:
         return "".join([c for c in group if c.isalnum() or c == "_" or c == "-"]).strip()
 
     def add(self, name: str, credential: str, group: str = "Default") -> None:
+        if self._local:
+            return self._local.add(name, credential, group)
+        
         name = self.sanitizeName(name)
         group = self.sanitizeGroup(group)
         self._tc.upsert_entity(mode="replace", entity={"PartitionKey": self._tenantName, "RowKey": group + "|" + name, "group": group, "name": name, "Credential": credential})
         return self
+        
     def get(self, name: str, group: str = "Default") -> Union[Dict[str, str], None]:
+        if self._local:
+            return self._local.get(name, group)
+        
         name = self.sanitizeName(name)
         group = self.sanitizeGroup(group)
         try:
@@ -84,7 +124,11 @@ class HackBoxCredentials:
             return entity
         except ResourceNotFoundError:
             return None
+            
     def getGroup(self, group : str = "Default") -> Dict[str, Dict[str, str]]:
+        if self._local:
+            return self._local.getGroup(group)
+        
         group = self.sanitizeGroup(group)
         
         entities = {}
@@ -93,7 +137,11 @@ class HackBoxCredentials:
             del entity["RowKey"]
             entities[entity["name"]] = entity
         return entities
+        
     def getAll(self) -> Dict[str, Dict[str, str]]:
+        if self._local:
+            return self._local.getAll()
+        
         entities = []
         for entity in self._tc.query_entities(query_filter=f"PartitionKey eq '{self._tenantName}'"):
             del entity["PartitionKey"]
@@ -104,22 +152,39 @@ class HackBoxCredentials:
 class HackBoxSettings:
     _tsc = None
     _tc  = None
+    _local = None
     _tenantName = "Default"
 
     def __init__(self, tenantName : str = "Default"):
-        endpoint = get_table_endpoint()
-        if endpoint:
-            self._tsc = TableServiceClient(endpoint=endpoint, credential=get_azure_credential())
-        else:
-            self._tsc = TableServiceClient.from_connection_string(conn_str=os.getenv("HACKBOX_CONNECTION_STRING"))
-        self._tc = self._tsc.get_table_client("settings")
         self._tenantName = str(tenantName).strip()
         self._tenantName = "".join([c for c in self._tenantName if c.isalnum() or c == "_" or c == "-" ]).strip()
         if self._tenantName == "":
             self._tenantName = "Default"
+        
+        # Use local storage if Azure is not configured
+        if use_local_storage():
+            self._local = LocalSettings(tenantName)
+            return
+        
+        # Try Azure Table Storage
+        try:
+            endpoint = get_table_endpoint()
+            if endpoint:
+                self._tsc = TableServiceClient(endpoint=endpoint, credential=get_azure_credential())
+            else:
+                self._tsc = TableServiceClient.from_connection_string(conn_str=os.getenv("HACKBOX_CONNECTION_STRING"))
+            self._tc = self._tsc.get_table_client("settings")
+        except Exception as e:
+            print(f"Failed to connect to Azure Table Storage: {e}")
+            print("Falling back to local storage")
+            self._local = LocalSettings(tenantName)
     
     def getAllDefaultTenantSettings(self) -> Dict[str, Union[str, int, bool]]:
-        entities = self.getAllTenantSettings("Default")
+        if self._local:
+            entities = self._local.getAllDefaultTenantSettings()
+        else:
+            entities = self.getAllTenantSettings("Default")
+            
         for tenant in entities:
             if "Stopwatch" in entities[tenant]:
                 entities[tenant]["Stopwatch"] = self._validateStopwatch(entities[tenant]["Stopwatch"])
@@ -130,7 +195,11 @@ class HackBoxSettings:
             else:
                 entities[tenant]["CurrentStep"] = self._validateStep(None)
         return entities
+        
     def getAllTenantSettings(self, group : str = "Default") -> Dict[str, Dict[str, Union[str, int, bool]]]:
+        if self._local:
+            return self._local.getAllTenantSettings(group)
+        
         group = self.sanitizeGroup(group)
         entities = {}
         for tenant in all_tenants:
@@ -152,6 +221,9 @@ class HackBoxSettings:
         return "".join([c for c in group if c.isalnum() or c == "_" or c == "-"]).strip()
 
     def setPropagatedStep(self, step: Union[int, str]) -> None:
+        if self._local:
+            return self._local.setPropagatedStep(step, challenges_mds)
+        
         reset_triggered = False
         previous_step = self.getStep()
         if isinstance(step, str):
@@ -185,7 +257,7 @@ class HackBoxSettings:
                         print(f"Logged challenge time for challenge {previous_step:d} for tenant {self._tenantName}: {secondsElapsed} seconds")
                 else:
                     challengeTimes = self.get("ChallengeCompletionSeconds", group="Statistics")
-                    if f"Challenge{previous_step:03d}" in challengeTimes:
+                    if challengeTimes and f"Challenge{previous_step:03d}" in challengeTimes:
                         del challengeTimes[f"Challenge{previous_step:03d}"]
                         self.set("ChallengeCompletionSeconds", challengeTimes, group="Statistics")
                         print(f"Removed challenge time for challenge {previous_step:d} for tenant {self._tenantName} due to step decrease")
@@ -203,20 +275,30 @@ class HackBoxSettings:
             print("Could not reset stopwatch:", e)
             pass
         
-    def setStep(self, step: int) -> None:    
+    def setStep(self, step: int) -> None:
+        if self._local:
+            return self._local.setStep(step)
+        
         if step < 1 or step > len(challenges_mds) + 1:
             raise ValueError("Step cannot be less than 1")
         self.set("CurrentStep", {"Step": step})
+        
     def _validateStep(self, step: Union[Dict[str, Union[str, int, bool]], None]) -> int:
         if step is None:
             return 1
         if "Step" not in step:
             return 1
         return step["Step"]
+        
     def getStep(self) -> int:
+        if self._local:
+            return self._local.getStep()
         return self._validateStep(self.get("CurrentStep"))
 
     def setStopwatch(self, status : str, startTime : Union[datetime.datetime, str, None], secondsElapsed: int) -> None:
+        if self._local:
+            return self._local.setStopwatch(status, startTime, secondsElapsed)
+        
         if status not in ["running", "stopped"]:
             raise ValueError("status must be 'running' or 'stopped'")
         if startTime is None:
@@ -258,17 +340,27 @@ class HackBoxSettings:
                 except Exception:
                     startTime = None
         return status, startTime, secondsElapsed
+        
     def getStopwatch(self) -> Tuple[str, Union[datetime.datetime, None], int]:
+        if self._local:
+            return self._local.getStopwatch()
         return self._validateStopwatch(self.get("Stopwatch"))
 
     def set(self, key: str, value: Dict[str, Union[str, int, bool]], group : str = "Default") -> None:
+        if self._local:
+            return self._local.set(key, value, group)
+        
         key = self.sanitizeKey(key)
         group = self.sanitizeGroup(group)
         value["key"] = key
         value["group"] = group
         self._tc.upsert_entity(mode="replace", entity={"PartitionKey": self._tenantName, "RowKey": group + "|" + key, **value})
         return self
+        
     def get(self, key, group : str = "Default") -> Union[Dict[str, Union[str, int, bool]], None]:
+        if self._local:
+            return self._local.get(key, group)
+        
         key = self.sanitizeKey(key)
         group = self.sanitizeGroup(group)
         try:
@@ -278,7 +370,11 @@ class HackBoxSettings:
             return entity
         except ResourceNotFoundError:
             return None
+            
     def getGroup(self, group: str = "Default") -> Dict[str, Union[str, int, bool]]:
+        if self._local:
+            return self._local.getGroup(group)
+        
         group = self.sanitizeGroup(group)
         entities = {}
         for entity in self._tc.query_entities(query_filter=f"PartitionKey eq '{self._tenantName}' and group eq '{group}'"):
@@ -287,8 +383,6 @@ class HackBoxSettings:
             entities[entity["key"]] = entity
         
         return entities
-
-
 
 
 #region -------- WEB/UI ENDPOINTS --------
