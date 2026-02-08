@@ -19,4 +19,7 @@ COPY requirements.txt /
 RUN pip install --no-cache-dir -U pip
 RUN pip install --no-cache-dir -r /requirements.txt
 
+# Make startup script executable
+RUN chmod +x /app/startup.sh
+
 CMD /app/startup.sh

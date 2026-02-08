@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  hackbox-console:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      # Use local file-based storage (no Azure dependencies)
+      - HACKBOX_LOCAL_STORAGE_DIR=/app/data
+      # Secret key for session management
+      - HACKBOX_SECRET_KEY=changeThisToASecureRandomString
+    volumes:
+      # Persist data across container restarts
+      - hackbox-data:/app/data
+      # Mount users.json for authentication
+      - ./users.json:/app/users.json:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  hackbox-data:
+    driver: local
