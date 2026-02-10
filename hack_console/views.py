@@ -37,8 +37,10 @@ def recursive_list_md_files(directory: str, contains_str: str = "") -> list:
                     f = os.path.join(root, filename)
                     if f.startswith(directory):
                         f = f[len(directory):]
-                        if f.startswith("/"):
+                        if f.startswith("/") or f.startswith("\\"):
                             f = f[1:]
+                    # Normalize path separators to forward slashes for URLs
+                    f = f.replace("\\", "/")
                     files.append(f)
     return natsort.natsorted(files)
 
@@ -389,6 +391,11 @@ def api_get_challenge():
         logout_user()
         return redirect(url_for("login"))
     try:
+        # Check if Azure connection is configured
+        if not (os.getenv("HACKBOX_CONNECTION_STRING") or get_table_endpoint()):
+            # Local dev mode without Azure - return default challenge
+            return jsonify({"success": True, "challenge": len(challenges_mds)})
+        
         hbSettings = HackBoxSettings(current_user.tenant)
         step = hbSettings.getStep()
         try:
@@ -449,8 +456,15 @@ def api_credentials():
         return redirect(url_for("login"))
     if current_user.role not in ["coach", "hacker"]:
         return jsonify({"error": "Unauthorized"}), 403
-    hbCredentials = HackBoxCredentials(current_user.tenant)
-    return jsonify(hbCredentials.getAll())
+    try:
+        # Check if Azure connection is configured
+        if not (os.getenv("HACKBOX_CONNECTION_STRING") or get_table_endpoint()):
+            # Local dev mode without Azure - return empty credentials
+            return jsonify([])
+        hbCredentials = HackBoxCredentials(current_user.tenant)
+        return jsonify(hbCredentials.getAll())
+    except Exception as e:
+        return jsonify([]), 200  # Return empty array instead of error for local dev
 
 @login_required
 @app.route("/api/settings", defaults={'group': "Default"})
@@ -469,6 +483,10 @@ def api_get_stopwatch():
         logout_user()
         return redirect(url_for("login"))
     try:
+        # Check if Azure connection is configured
+        if not (os.getenv("HACKBOX_CONNECTION_STRING") or get_table_endpoint()):
+            # Local dev mode without Azure - return stopped stopwatch
+            return jsonify({"success": True, "status": "stopped", "startTime": None, "secondsElapsed": 0})
         hbSettings = HackBoxSettings(current_user.tenant)
         status, startTime, secondsElapsed = hbSettings.getStopwatch()
         if startTime is not None:
@@ -640,14 +658,20 @@ def static_challenges(filename):
         if filename.endswith(".md") and "challenge" in filename.split("/")[-1].lower():
             # is it in the list of challenges?
             if filename in challenges_mds:
-                # get the position in the array
-                idx = challenges_mds.index(filename) + 1
-                # get the current challenge
-                hbSettings = HackBoxSettings(current_user.tenant)
-                current_challenge = hbSettings.getStep()
-                # if the challenge is not available, return an error
-                if idx > current_challenge:
-                    return "# Challenge not yet available", 404, {"Content-Type": "text/markdown"}
+                # Check if Azure connection is configured
+                if os.getenv("HACKBOX_CONNECTION_STRING") or get_table_endpoint():
+                    try:
+                        # get the position in the array
+                        idx = challenges_mds.index(filename) + 1
+                        # get the current challenge
+                        hbSettings = HackBoxSettings(current_user.tenant)
+                        current_challenge = hbSettings.getStep()
+                        # if the challenge is not available, return an error
+                        if idx > current_challenge:
+                            return "# Challenge not yet available", 404, {"Content-Type": "text/markdown"}
+                    except:
+                        # In local dev without Azure, allow all challenges
+                        pass
         return send_from_directory(challenges_dir, filename)
     return redirect(url_for("login"))
 
