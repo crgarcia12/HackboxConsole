@@ -382,6 +382,65 @@ def login():
     return render_template("login.html", user=current_user)
 #endregion -------- WEB/UI ENDPOINTS --------
 
+#region -------- REACT API ENDPOINTS --------
+# These routes serve the React frontend (api.ts / AuthContext.tsx)
+
+@app.route("/api/auth/login", methods=["POST"])
+def api_auth_login():
+    username = str(request.form.get("username", "")).lower().strip()
+    if username not in all_users:
+        return jsonify({"success": False, "message": "User not found"}), 401
+    user = all_users[username]
+    if str(user.username).lower().strip() != username:
+        return jsonify({"success": False, "message": "Invalid credentials"}), 401
+    if user.password == request.form.get("password"):
+        login_user(user)
+        return jsonify({"success": True, "username": user.username, "role": user.role})
+    return jsonify({"success": False, "message": "Invalid credentials"}), 401
+
+@app.route("/api/auth/logout", methods=["POST", "GET"])
+def api_auth_logout():
+    logout_user()
+    return jsonify({"success": True})
+
+@app.route("/api/auth/status")
+def api_auth_status():
+    if current_user.is_authenticated and isinstance(current_user, HackBoxUser):
+        return jsonify({"authenticated": True, "username": current_user.username, "role": current_user.role})
+    return jsonify({"authenticated": False})
+
+@app.route("/api/challenge/current")
+@login_required
+def api_challenge_current():
+    return api_get_challenge()
+
+@app.route("/api/challenge/list")
+@login_required
+def api_challenge_list():
+    return api_challenges()
+
+@app.route("/api/solution/list")
+@login_required
+def api_solution_list():
+    return api_solutions()
+
+@app.route("/api/challenge/set", methods=["POST"])
+@login_required
+def api_challenge_set():
+    return api_set_challenge()
+
+@app.route("/api/credentials")
+@login_required
+def api_credentials_react():
+    return api_credentials()
+
+@app.route("/api/tenant/list")
+@login_required
+def api_tenant_list():
+    return api_get_tenants_settings()
+
+#endregion -------- REACT API ENDPOINTS --------
+
 #region -------- API ENDPOINTS --------
 
 @login_required

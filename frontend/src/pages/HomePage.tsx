@@ -5,7 +5,7 @@ import { getCurrentChallenge, getChallengeList } from "@/lib/api";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Progress } from "@/components/ui/Progress";
-import { Trophy, Rocket, Lightbulb, Keyboard } from "lucide-react";
+import { Trophy, Rocket, Lightbulb, Keyboard, Terminal } from "lucide-react";
 
 export default function HomePage() {
   const { isAuthenticated, username, role } = useAuth();
@@ -133,15 +133,5 @@ function Shortcut({ keys, description }: { keys: string; description: string }) 
       </kbd>
       <span className="text-muted-foreground">{description}</span>
     </div>
-  );
-}
-
-function Terminal(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 64 64" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <rect x="6" y="10" width="52" height="44" rx="10" fill="currentColor" fillOpacity={0.1} stroke="currentColor" strokeWidth="4" />
-      <path d="M20 23 28 31 20 39" stroke="currentColor" strokeWidth="5" fill="none" />
-      <path d="M34 39h12" stroke="currentColor" strokeWidth="5" />
-    </svg>
   );
 }
